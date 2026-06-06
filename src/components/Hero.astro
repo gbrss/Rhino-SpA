@@ -1,13 +1,17 @@
----
 // src/components/Hero.astro
 // ─────────────────────────────────────────────────────────────
-// RHINO® — Hero Split Layout (Opción 2: Moderno/Corporativo)
-// Background-image con gradient overlay + stats bar inferior
+// RHINO® — Hero Slider con background-image (crossfade)
+// Transición automática cada N segundos (configurable en site.ts)
+// REGLA: background-image, NO <img> con object-cover
 // ─────────────────────────────────────────────────────────────
 
 import { site } from '@/config/site';
 
 const { hero, stats } = site;
+
+// Slides array from config
+const slides = hero.slides ?? ['/slide1.png', '/slide2.png'];
+const slideInterval = hero.slideInterval ?? 3000;
 
 // Icon paths for stats
 const statIconPaths: Record<string, string> = {
@@ -23,16 +27,34 @@ const statIconPaths: Record<string, string> = {
 ---
 
 <!-- ═════════════════════════════════════════════════════════ -->
-<!-- HERO SECTION                                              -->
+<!-- HERO SECTION — SLIDER                                     -->
 <!-- ═════════════════════════════════════════════════════════ -->
-<section id="inicio" class="hero-section">
-  <!-- Background Image -->
-  <div
-    class="hero-bg"
-    style={`background-image: url('${hero.image}');`}
-  ></div>
+<section id="inicio" class="hero-section" data-slide-interval={slideInterval}>
+  <!-- Slider Background Layers (background-image, NOT <img>) -->
+  {
+slides.map
+((slide: string, index: number) => (
+    <div
+      class={`hero-slide ${index === 0 ? 'hero-slide--active' : ''}`}
+      style={`background-image: url('${slide}'); background-size: cover; background-position: center; background-repeat: no-repeat;`}
+      data-slide-index={index}
+    ></div>
+  ))}
 
-  <!-- Content -->
+  <!-- Slider Navigation Dots -->
+  <div class="hero-slider-dots">
+    {
+slides.map
+((_: string, index: number) => (
+      <button
+        class={`hero-dot ${index === 0 ? 'hero-dot--active' : ''}`}
+        data-dot-index={index}
+        aria-label={`Ir a slide ${index + 1}`}
+      ></button>
+    ))}
+  </div>
+
+  <!-- Content (sits above all slides via z-index) -->
   <div class="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-32 lg:py-0 w-full">
     <div class="hero-content">
       <!-- Eyebrow -->
@@ -78,7 +100,9 @@ const statIconPaths: Record<string, string> = {
 <div class="stats-bar">
   <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
     <div class="grid grid-cols-2 lg:grid-cols-4 divide-x divide-white/10">
-      {stats.map((stat) => (
+      {
+stats.map
+((stat) => (
         <div class="stat-item">
           <div class="flex items-center justify-center gap-3">
             <svg
@@ -107,10 +131,55 @@ const statIconPaths: Record<string, string> = {
 </div>
 
 <!-- ═════════════════════════════════════════════════════════ -->
-<!-- HERO ANIMATIONS                                           -->
+<!-- HERO ANIMATIONS + SLIDER STYLES                           -->
 <!-- ═════════════════════════════════════════════════════════ -->
 <style>
-  /* Entry animations */
+  /* ── Slider Layers ─────────────────────────────────────── */
+  .hero-slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 1.2s ease-in-out;
+    z-index: 0;
+  }
+
+  .hero-slide--active {
+    opacity: 1;
+  }
+
+  /* ── Navigation Dots ───────────────────────────────────── */
+  .hero-slider-dots {
+    position: absolute;
+    bottom: 2rem;
+    right: 2rem;
+    display: flex;
+    gap: 0.75rem;
+    z-index: 15;
+  }
+
+  .hero-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.6);
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+    transition: all 0.3s ease;
+  }
+
+  .hero-dot:hover {
+    border-color: var(--color-accent-400);
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .hero-dot--active {
+    background: var(--color-accent-400);
+    border-color: var(--color-accent-400);
+    transform: scale(1.15);
+  }
+
+  /* ── Entry Animations ──────────────────────────────────── */
   .hero-eyebrow {
     animation: fadeSlideUp 0.8s ease forwards 0.3s;
   }
@@ -151,29 +220,98 @@ const statIconPaths: Record<string, string> = {
     }
   }
 
-  /* Subtle parallax-like depth on the background */
+  /* ── Subtle zoom on active slide (respects reduced motion) */
   @media (prefers-reduced-motion: no-preference) {
-    .hero-bg {
-      will-change: transform;
-      animation: heroZoom 20s ease-in-out infinite alternate;
+    .hero-slide--active {
+      animation: heroSlideZoom 8s ease-in-out infinite alternate;
     }
   }
 
-  @keyframes heroZoom {
+  @keyframes heroSlideZoom {
     from { transform: scale(1); }
     to { transform: scale(1.06); }
   }
 </style>
 
+<!-- ═════════════════════════════════════════════════════════ -->
+<!-- SLIDER SCRIPT                                             -->
+<!-- ═════════════════════════════════════════════════════════ -->
 <script>
-  // ── Intersection Observer for scroll reveal ──────────────
   document.addEventListener('DOMContentLoaded', () => {
+    const heroSection = document.querySelector<HTMLElement>('.hero-section');
+    if (!heroSection) return;
+
+    const slides = heroSection.querySelectorAll<HTMLElement>('.hero-slide');
+    const dots = heroSection.querySelectorAll<HTMLElement>('.hero-dot');
+    const totalSlides = slides.length;
+
+    // No slider needed for 0 or 1 slides
+    if (totalSlides <= 1) return;
+
+    const interval = parseInt(heroSection.dataset.slideInterval || '3000', 10);
+    let currentIndex = 0;
+    let timer: ReturnType<typeof setInterval>;
+
+    function goToSlide(index: number) {
+      // Deactivate current
+      slides[currentIndex]?.classList.remove('hero-slide--active');
+      dots[currentIndex]?.classList.remove('hero-dot--active');
+
+      // Activate new
+      currentIndex = index;
+      slides[currentIndex]?.classList.add('hero-slide--active');
+      dots[currentIndex]?.classList.add('hero-dot--active');
+    }
+
+    function nextSlide() {
+      goToSlide((currentIndex + 1) % totalSlides);
+    }
+
+    function startAutoplay() {
+      timer = setInterval(nextSlide, interval);
+    }
+
+    function resetAutoplay() {
+      clearInterval(timer);
+      startAutoplay();
+    }
+
+    // Dot click navigation
+    dots.forEach((dot) => {
+      dot.addEventListener('click', () => {
+        const index = parseInt(dot.dataset.dotIndex || '0', 10);
+        if (index !== currentIndex) {
+          goToSlide(index);
+          resetAutoplay(); // Reset timer on manual navigation
+        }
+      });
+    });
+
+    // Pause on hover (desktop), resume on leave
+    heroSection.addEventListener('mouseenter', () => clearInterval(timer));
+    heroSection.addEventListener('mouseleave', startAutoplay);
+
+    // Pause when tab is hidden (performance)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        clearInterval(timer);
+      } else {
+        startAutoplay();
+      }
+    });
+
+    // Start
+    startAutoplay();
+
+    // ── Intersection Observer for scroll reveal ──────────────
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             entry.target.classList.add('is-visible');
-            observer.unobserve(entry.target);
+            observer.unobserve(
+entry.target
+);
           }
         });
       },
@@ -184,4 +322,4 @@ const statIconPaths: Record<string, string> = {
       .querySelectorAll('.reveal, .reveal-left, .reveal-right, .reveal-stagger')
       .forEach((el) => observer.observe(el));
   });
-</script>
+</script> 
