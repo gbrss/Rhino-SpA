@@ -17,8 +17,8 @@ export const site = {
   siteUrl: 'https://rhino-spa.cl',
 
   // ─── Contacto ─────────────────────────────────────────────
-  phone: '+56945422388',
-  phoneDisplay: '+56 9 4542 2388',
+  phone: '+56950212845',
+  phoneDisplay: '+56 9 5021 2845',
   email: 'contacto@rhino-spa.cl',
   whatsapp: '56945422388',
   whatsappMessage:
