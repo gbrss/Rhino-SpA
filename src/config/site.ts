@@ -20,7 +20,7 @@ export const site = {
   phone: '+56950212845',
   phoneDisplay: '+56 9 5021 2845',
   email: 'contacto@rhino-spa.cl',
-  whatsapp: '56945422388',
+  whatsapp: '56950212845',
   whatsappMessage:
     'Hola, me interesa conocer los servicios de RHINO para mi proyecto minero. ¿Podemos conversar?',
 
